@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>İndirici Pro</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <span>İndirici Pro</span>
+    </div>
+    <div id="statusBadge" class="status offline">● Kontrol ediliyor...</div>
+  </header>
+
+  <section class="key-box">
+    <input
+      id="keyInput"
+      type="text"
+      placeholder="Opsiyonel KID:KEY yapıştırın (şifreli yayınlar için)"
+      autocomplete="off"
+    />
+  </section>
+
+  <section class="list-header">
+    <span id="countText">Yakalanan Yayınlar (0)</span>
+    <button id="clearBtn" class="btn-ghost" title="Listeyi Temizle">🧹 Temizle</button>
+  </section>
+
+  <main id="streamList" class="stream-list">
+    <div class="empty">
+      Bu sekmede henüz MPD veya M3U8 yayını yakalanmadı.<br />
+      Videoyu oynattığınızda yayınlar burada otomatik görünecektir.
+    </div>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

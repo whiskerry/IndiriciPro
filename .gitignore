@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Build & Release Outputs
+build/
+dist/
+release/
+*.spec
+*.rar
+*.zip
+
+# External Third-Party Binaries (distributed via GitHub Releases, not Git)
+tools/*.exe
+tools/*.dll
+
+# Runtime / User Data & Private Keys
+data/
+Logs/
+İndirilenler/
+_temp/
+*.log
+*.meta.json
+*widevine*keys*.json
+history.json
+settings.json
+portable.flag
