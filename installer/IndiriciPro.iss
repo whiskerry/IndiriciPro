@@ -1,6 +1,6 @@
 ; Inno Setup Script for Indirici Pro
 #define MyAppName "İndirici Pro"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "Indirici Pro"
 #define MyAppExeName "IndiriciPro.exe"
 
@@ -34,7 +34,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\build\stage_dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\assets\app_icon.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\tools\N_m3u8DL-RE.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\tools\ffmpeg.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\tools\mp4decrypt.exe"; DestDir: "{app}\tools"; Flags: ignoreversion

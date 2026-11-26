@@ -26,7 +26,7 @@ Write-Host "[1/4] PyInstaller ile IndiriciPro.exe derleniyor..." -ForegroundColo
     --noconfirm --clean --onefile --windowed `
     --name IndiriciPro `
     --icon "$Root\assets\app_icon.ico" `
-    --add-data "$Root\assets\app_icon.ico;assets" `
+    --add-data "$Root\assets;assets" `
     --distpath "$StageDist" `
     --workpath "$Root\build" `
     --specpath "$Root\build" `
@@ -48,7 +48,7 @@ if (Test-Path $PortableDir) { Remove-Item -Recurse -Force $PortableDir }
 New-Item -ItemType Directory -Force -Path "$PortableDir\tools","$PortableDir\assets","$PortableDir\data","$PortableDir\İndirilenler" | Out-Null
 
 Copy-Item "$StageDist\IndiriciPro.exe" "$PortableDir\IndiriciPro.exe"
-Copy-Item "$Root\assets\app_icon.ico" "$PortableDir\assets\app_icon.ico"
+Copy-Item "$Root\assets\*" "$PortableDir\assets\" -Force
 Copy-Item "$Root\README.md" "$PortableDir\README.md"
 Copy-Item "$Root\LICENSE" "$PortableDir\LICENSE"
 "PORTABLE" | Out-File -Encoding ascii "$PortableDir\portable.flag"

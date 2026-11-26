@@ -2,6 +2,10 @@
 import os
 import re
 import sys
+import io
+import math
+import struct
+import wave
 import json
 import time
 import shutil
@@ -14,10 +18,15 @@ from pathlib import Path
 from urllib.parse import urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
 # ============================================================================
 # DİNAMİK KLASÖR VE ARAÇ YAPILANDIRMASI (PORTABLE + KURULUM UYUMLU)
 # ============================================================================
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 CHROME_BRIDGE_PORT = 45821
 
 if getattr(sys, "frozen", False):
@@ -61,21 +70,26 @@ def arac_bul(exe_adi: str) -> Path:
     return APP_DIR / "tools" / exe_adi
 
 
-def ikon_bul() -> Path:
-    """Gömülü veya yerel uygulama ikonunu (app_icon.ico) döner."""
+def varlik_bul(dosya_adi: str) -> Path:
+    """Gömülü (_MEIPASS) veya yerel assets/ klasöründeki dosyayı (ikon/ses) bulur."""
     meipass = getattr(sys, "_MEIPASS", None)
     adaylar = []
     if meipass:
-        adaylar.append(Path(meipass) / "assets" / "app_icon.ico")
-        adaylar.append(Path(meipass) / "app_icon.ico")
+        adaylar.append(Path(meipass) / "assets" / dosya_adi)
+        adaylar.append(Path(meipass) / dosya_adi)
     adaylar.extend([
-        APP_DIR / "assets" / "app_icon.ico",
-        APP_DIR / "app_icon.ico",
+        APP_DIR / "assets" / dosya_adi,
+        APP_DIR / dosya_adi,
     ])
     for aday in adaylar:
         if aday.exists():
             return aday
     return None
+
+
+def ikon_bul() -> Path:
+    """Gömülü veya yerel uygulama ikonunu (app_icon.ico) döner."""
+    return varlik_bul("app_icon.ico")
 
 
 N_M3U8DL_EXE = arac_bul("N_m3u8DL-RE.exe")
@@ -137,6 +151,77 @@ def temizle_ve_satirlara_bol(ham_metin: str) -> list:
             if alt:
                 satirlar.append(alt)
     return satirlar
+
+
+def _melodi_wav_uret(notalar: list, sample_rate: int = 22050, hacim: float = 0.28) -> bytes:
+    """
+    Harici ses dosyası gerektirmeden yumuşak fade-in/fade-out'lu bellek içi WAV üretir.
+    notalar: [(frekans_hz, sure_sn), ...]
+    """
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        frames = bytearray()
+        for freq, dur in notalar:
+            n_samples = int(sample_rate * dur)
+            fade = max(1, int(sample_rate * 0.018))
+            for i in range(n_samples):
+                t = i / sample_rate
+                env = 1.0
+                if i < fade:
+                    env = i / fade
+                elif i > n_samples - fade:
+                    env = max(0.0, (n_samples - i) / fade)
+                # Ana ton + hafif 2. harmonik ile yumuşak zil/uyarı tınısı
+                val = (
+                    0.80 * math.sin(2.0 * math.pi * freq * t)
+                    + 0.20 * math.sin(2.0 * math.pi * (freq * 2.0) * t)
+                )
+                sample = int(max(-32767, min(32767, val * env * hacim * 32767)))
+                frames.extend(struct.pack("<h", sample))
+        wf.writeframes(bytes(frames))
+    return buf.getvalue()
+
+
+_SES_ONBELLEK = {}
+
+
+def bildirim_sesi_cal(tur: str = "success", aktif: bool = True):
+    """
+    İşlem sonucuna göre assets/success.wav (Kristal Zil) veya assets/error.wav (Üzgün Trombon)
+    dosyasını çalar; dosya yoksa dahili melodiye düşer.
+    """
+    if not aktif or winsound is None:
+        return
+
+    def _cal():
+        try:
+            wav_adi = "success.wav" if tur == "success" else "error.wav"
+            wav_yol = varlik_bul(wav_adi)
+            if wav_yol and wav_yol.exists():
+                winsound.PlaySound(str(wav_yol), winsound.SND_FILENAME)
+                return
+            if tur not in _SES_ONBELLEK:
+                if tur == "success":
+                    _SES_ONBELLEK[tur] = _melodi_wav_uret(
+                        [(698.46, 0.10), (880.0, 0.10), (1046.5, 0.12), (1396.91, 0.24)], hacim=0.28
+                    )
+                else:
+                    _SES_ONBELLEK[tur] = _melodi_wav_uret(
+                        [(293.66, 0.16), (277.18, 0.16), (261.63, 0.16), (246.94, 0.30)], hacim=0.32
+                    )
+            winsound.PlaySound(_SES_ONBELLEK[tur], winsound.SND_MEMORY)
+        except Exception:
+            try:
+                winsound.MessageBeep(
+                    winsound.MB_OK if tur == "success" else winsound.MB_ICONHAND
+                )
+            except Exception:
+                pass
+
+    threading.Thread(target=_cal, daemon=True).start()
 
 
 def boyut_formatla(bayt: float) -> str:
@@ -1096,6 +1181,7 @@ class IndiriciProApp:
         kayitli_klasor = self.ayarlar.get("download_dir", "")
         self.download_dir = Path(kayitli_klasor) if kayitli_klasor else DEFAULT_DOWNLOAD_DIR
         self.temp_work_dir = self.download_dir / "_temp"
+        self.ses_bildirim_aktif = bool(self.ayarlar.get("sound_enabled", True))
 
         self.gecmis = gecmis_yukle()
 
@@ -1191,6 +1277,19 @@ class IndiriciProApp:
         )
         self.json_hizli_btn.pack(side="right", padx=4)
         self._tk_accent_btns.append(self.json_hizli_btn)
+
+        self.ses_toggle_btn = tk.Button(
+            self.ust_frame,
+            text="🔊" if self.ses_bildirim_aktif else "🔇",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=self.ses_bildirim_degistir,
+        )
+        self.ses_toggle_btn.pack(side="right", padx=4)
+        self._tk_primary_btns.append(self.ses_toggle_btn)
 
         self.tema_var = tk.StringVar(value=self.aktif_tema_adi)
         self.tema_combo = ttk.Combobox(
@@ -2580,6 +2679,14 @@ class IndiriciProApp:
             self._url_veya_isim_degisti()
             self._log_yaz(f"[Sistem] İndirme klasörü güncellendi: {self.download_dir}\n")
 
+    def ses_bildirim_degistir(self):
+        self.ses_bildirim_aktif = not self.ses_bildirim_aktif
+        self.ayarlar["sound_enabled"] = self.ses_bildirim_aktif
+        ayar_kaydet(self.ayarlar)
+        self.ses_toggle_btn.configure(text="🔊" if self.ses_bildirim_aktif else "🔇")
+        if self.ses_bildirim_aktif:
+            bildirim_sesi_cal("success", True)
+
     def _log_yaz(self, metin: str):
         def _ekle():
             self.log_text.insert("end", metin)
@@ -3325,6 +3432,7 @@ class IndiriciProApp:
                 )
                 self._hata_yaz(rapor)
                 self._log_yaz("\n" + "=" * 75 + "\n" + rapor + "\n")
+                bildirim_sesi_cal("success", self.ses_bildirim_aktif)
                 q_idx = gorev.get("queue_index", -1)
                 if 0 <= q_idx < len(self.kuyruk):
                     self.kuyruk[q_idx]["status"] = "✅ Tamamlandı"
@@ -3340,6 +3448,7 @@ class IndiriciProApp:
             else:
                 self._gecmis_durum_guncelle(url, "❌ Hatalı")
                 self._ilerleme_guncelle({"stage": "❌ İndirme Hatası (Log korundu)"}, zorla=True)
+                bildirim_sesi_cal("error", self.ses_bildirim_aktif)
                 # C# unhandled exception gibi sadece ekrana düşen hataları da log dosyasına ekle
                 if log_file and log_file.exists() and tum_cikti:
                     try:
